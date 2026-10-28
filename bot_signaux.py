@@ -21,6 +21,7 @@ Utilisation :
   python bot_signaux.py --test        # message de test sur Discord
   python bot_signaux.py --backtest    # simule la partie technique sur 5 ans
   python bot_signaux.py               # vérifie une fois
+  python bot_signaux.py --auto        # (GitHub) résumé d'ouverture, résumé avant la clôture, alertes en séance
   python bot_signaux.py --loop        # vérifie toutes les 60 min (--every 30 pour changer)
 
 Chaque source qui ne répond pas est simplement ignorée (le terminal l'indique).
@@ -36,6 +37,7 @@ from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from urllib.parse import quote_plus
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -55,7 +57,12 @@ NAMES = {
     "PFE": "Pfizer", "SOFI": "SoFi",
 }
 
-WEBHOOK = os.environ.get("DISCORD_WEBHOOK_URL", "")
+WEBHOOK = os.environ.get("DISCORD_WEBHOOK_URL", "")   # webhook « de secours » pour les 3 salons
+HOOKS = {   # un webhook par salon Discord
+    "ouverture": os.environ.get("DISCORD_WEBHOOK_OUVERTURE") or WEBHOOK,
+    "fermeture": os.environ.get("DISCORD_WEBHOOK_FERMETURE") or WEBHOOK,
+    "alertes": os.environ.get("DISCORD_WEBHOOK_ALERTES") or WEBHOOK,
+}
 SEC_UA = os.environ.get("SEC_USER_AGENT") or "bot-signaux-perso contact@example.com"
 WEB_UA = "Mozilla/5.0 (compatible; bot-signaux-perso)"
 STATE_FILE = Path(__file__).with_name("signaux_envoyes.json")
@@ -305,9 +312,10 @@ def analyst_changes(ticker, days=ANALYST_DAYS):
 
 
 # ---------- Messages Discord ----------
-def send_discord(text):
-    if not WEBHOOK:
-        raise SystemExit("DISCORD_WEBHOOK_URL n'est pas défini (voir l'en-tête du script).")
+def send_discord(text, channel="fermeture"):
+    hook = HOOKS.get(channel) or WEBHOOK
+    if not hook:
+        raise SystemExit(f"Aucun webhook Discord pour le salon « {channel} » (voir l'en-tête du script).")
     chunks, cur = [], ""
     for line in text.split("\n"):   # Discord limite un message à 2000 caractères : on découpe par lignes
         line = line[:1500]
@@ -320,7 +328,7 @@ def send_discord(text):
     for i, c in enumerate(chunks):
         if i:
             time.sleep(0.7)
-        r = requests.post(WEBHOOK, json={"content": c}, timeout=15)
+        r = requests.post(hook, json={"content": c}, timeout=15)
         r.raise_for_status()
 
 
@@ -474,10 +482,37 @@ def export_site(rows, market_up):
     SITE_DATA.write_text("window.BOT_DATA = " + json.dumps(data, ensure_ascii=False, default=str) + ";\n", encoding="utf-8")
 
 
-def check_signals(force_summary=True):
-    state, lines, rows = load_state(), [], []
+def market_clock():
+    """Heure à New York : (jour de semaine ?, minutes depuis minuit, date du jour là-bas)."""
+    ny = datetime.now(ZoneInfo("America/New_York"))
+    return ny.weekday() < 5, ny.hour * 60 + ny.minute, ny.date()
+
+
+def alert_message(t, last, ctx, votes, verdict):
+    """Alerte en séance : agir tout de suite."""
+    buy = verdict == "ACHETER"
+    want = 1 if buy else -1
+    names = {"tendance court terme": "Tendance court terme", "actu": "Actualité", "analystes": "Analystes",
+             "tendance 200 j": "Tendance de fond", "marché": "Marché"}
+    title = (f"🚨🟢 **ALERTE : ACHÈTE MAINTENANT : {t}**" if buy
+             else f"🚨🔴 **ALERTE : VENDS MAINTENANT : {t}** (si tu en détiens)")
+    parts = [title, f"Prix : {last.close:.2f} $ (séance en cours, prix retardé d'environ 15 min)",
+             f"**{sum(v == want for v in votes.values())}/5 sources d'accord**",
+             *[f"{'✅' if v == want else '❌' if v == -want else '➖'} {names[k]}" for k, v in votes.items()]]
+    if ctx["news"]:
+        parts.append("**Actus :**")
+        parts.extend(headlines(ctx["news"], 2))
+    parts.append("⚠️ La séance n'est pas terminée : le signal peut encore s'inverser avant la clôture.")
+    return "\n".join(parts)
+
+
+def check_signals(mode="manual"):
+    """mode « manual » : tout part dans le salon fermeture, tout de suite.
+    mode « auto »   : résumé à l'ouverture, résumé avant la clôture, alertes en séance (heure de New York)."""
+    state, pending, rows, cands = load_state(), [], [], []
     today, now = datetime.now().date(), datetime.now(timezone.utc)
-    market_up = market_trend()
+    weekday, mins, ny_today = market_clock()
+    market_up, traded = market_trend(), False
     for t in TICKERS:
         try:
             d = compute(fetch(t, "2y"))
@@ -490,27 +525,26 @@ def check_signals(force_summary=True):
                "up": up, "down": down, "market_up": market_up}
         days = (earn - today).days if earn else None
         last, day = d.iloc[-1], str(d.index[-1].date())
+        traded = traded or d.index[-1].date() == ny_today
         n_y = sum("Yahoo Finance" in x["sources"] for x in news)
         n_g = sum("Google Actualités" in x["sources"] for x in news)
         srcs = f"actus {len(news)} (Yahoo {n_y}, Google {n_g}) · SEC {len(ctx['filings'])} · analystes +{up}/-{down}"
 
-        # Signal technique du jour, vérifié par les autres sources : un message détaillé
         sig, conf = None, None
         if last.buy != last.sell:
             sig = "ACHAT" if last.buy else "VENTE"
             key = f"{day}:{sig}"
             text, conf = explain(sig, t, last, d, day, ctx)
             if state.get(t) != key:
-                lines.append(text)
-                state[t] = key
+                pending.append((t, key, text))
         print(f"{t}: {'signal ' + sig if sig else 'pas de signal'} | {srcs}")
 
-        # Verdict pour le résumé final
         votes = current_votes(last, ctx)
         verdict, reason = make_verdict(sig, conf, votes, days)
         net24 = news_net([n for n in news if now - n["when"] <= timedelta(hours=24)])
         if abs(net24) >= NEWS_ALERT_SCORE:
             reason += f" · 📰 grosse actu {tone(net24)}"
+        cands.append((t, last, ctx, votes, verdict))
         rows.append({
             "t": t, "name": NAMES.get(t, t), "price": round(float(last.close), 2),
             "chg1": float(d.close.iloc[-1] / d.close.iloc[-2] - 1),
@@ -526,21 +560,52 @@ def check_signals(force_summary=True):
                         for f in ctx["filings"]],
         })
 
-    if rows:
-        export_site(rows, market_up)
     if not rows:
         raise SystemExit("Aucune action n'a pu être analysée (Yahoo bloque peut-être cette connexion).")
+    export_site(rows, market_up)
     summary = build_summary(rows)
-    send_summary = bool(summary) and (force_summary or state.get("summary") != str(today))
-    if send_summary:
-        state["summary"] = str(today)
-    msgs = lines + ([summary] if send_summary else [])
-    for i, msg in enumerate(msgs):
-        send_discord(msg + ("\n" + FOOTER if i == len(msgs) - 1 else ""))
-    if msgs:
-        STATE_FILE.write_text(json.dumps(state))
-    print("\n" + (summary or "Aucune donnée."))
-    print(f"\n{len(msgs)} message(s) envoyé(s) sur Discord.")
+
+    sends = []   # (salon, message)
+    if mode == "manual":
+        for t, key, text in pending:
+            state[t] = key
+            sends.append(("fermeture", text))
+        sends.append(("fermeture", summary))
+    else:
+        open_phase = weekday and traded and 570 <= mins < 720      # 9h30 à 12h, heure de New York
+        close_phase = weekday and traded and 930 <= mins < 1020    # 15h30 à 17h
+        in_session = weekday and traded and 570 <= mins < 960      # 9h30 à 16h
+        if open_phase and state.get("sum_open") != str(ny_today):
+            sends.append(("ouverture", "🔔 **Ouverture de Wall Street**\n" + summary))
+            state["sum_open"] = str(ny_today)
+            for t, _l, _c, _v, verdict in cands:
+                state[t + "_v"] = verdict          # nouvelle base de comparaison pour les alertes
+        elif in_session:
+            n = 0
+            for t, last, ctx, votes, verdict in cands:
+                prev = state.get(t + "_v")
+                state[t + "_v"] = verdict
+                total = sum(votes.values())
+                strong = (verdict == "ACHETER" and total >= 4) or (verdict == "ÉVITER / VENDRE" and total <= -4)
+                key = f"{ny_today}:{verdict}"
+                if strong and prev is not None and prev != verdict and state.get(t + "_alert") != key and n < 5:
+                    sends.append(("alertes", alert_message(t, last, ctx, votes, verdict)))
+                    state[t + "_alert"] = key
+                    n += 1
+        if close_phase and state.get("sum_close") != str(ny_today):
+            for t, key, text in pending:
+                state[t] = key
+                sends.append(("fermeture", text))
+            head = ("🕓 **Avant la clôture** (séance terminée dans moins de 30 min : données provisoires)"
+                    if mins < 960 else "🔔 **Clôture de Wall Street** (données finales de la journée)")
+            sends.append(("fermeture", head + "\n" + summary))
+            state["sum_close"] = str(ny_today)
+
+    for channel, text in sends:
+        send_discord(text + "\n" + FOOTER, channel)
+    STATE_FILE.write_text(json.dumps(state, sort_keys=True))
+    print("\n" + summary)
+    print(f"\n{len(sends)} message(s) envoyé(s) sur Discord.")
 
 
 # ---------- Backtest (partie technique seulement : les autres sources passées ne sont pas disponibles) ----------
@@ -573,18 +638,23 @@ def main():
     p.add_argument("--test", action="store_true")
     p.add_argument("--backtest", action="store_true")
     p.add_argument("--loop", action="store_true")
-    p.add_argument("--every", type=int, default=60, help="minutes entre deux vérifications")
+    p.add_argument("--auto", "--intraday", dest="auto", action="store_true",
+                   help="mode automatique : résumé d'ouverture, résumé avant la clôture, alertes en séance")
+    p.add_argument("--every", type=int, default=60, help="minutes entre deux vérifications (avec --loop)")
     a = p.parse_args()
     if a.test:
-        send_discord("✅ Le bot de signaux est bien connecté à Discord.")
+        for ch in ("ouverture", "fermeture", "alertes"):
+            send_discord(f"✅ Le bot de signaux est bien connecté à Discord (salon {ch}).", ch)
     elif a.backtest:
         backtest()
+    elif a.auto:
+        check_signals("auto")
     elif a.loop:
         while True:
-            check_signals(force_summary=False)  # résumé une seule fois par jour
+            check_signals("auto")
             time.sleep(a.every * 60)
     else:
-        check_signals()
+        check_signals("manual")
 
 
 if __name__ == "__main__":
