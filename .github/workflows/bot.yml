@@ -2,8 +2,13 @@ name: Bot de signaux
 
 on:
   schedule:
-    - cron: "30 21 * * 1-5"   # 21h30 UTC, du lundi au vendredi, après la clôture de Wall Street
-  workflow_dispatch:           # bouton « Run workflow » pour le lancer à la main
+    - cron: "*/15 13-21 * * 1-5"   # toutes les 15 min, du lundi au vendredi, pendant les heures de Wall Street (UTC)
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Envoyer un message de test dans les 3 salons Discord"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -24,16 +29,19 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Lancer le bot
         env:
+          DISCORD_WEBHOOK_OUVERTURE: ${{ secrets.DISCORD_WEBHOOK_OUVERTURE }}
+          DISCORD_WEBHOOK_FERMETURE: ${{ secrets.DISCORD_WEBHOOK_FERMETURE }}
+          DISCORD_WEBHOOK_ALERTES: ${{ secrets.DISCORD_WEBHOOK_ALERTES }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
           SITE_DIR: docs
-        run: python bot_signaux.py
+        run: python bot_signaux.py ${{ inputs.test && '--test' || '--auto' }}
       - name: Garder la mémoire des alertes déjà envoyées
         run: |
           git config user.name "signal-bot"
           git config user.email "signal-bot@users.noreply.github.com"
           git add signaux_envoyes.json || true
-          git diff --staged --quiet || (git commit -m "État des alertes" && git push)
+          git diff --staged --quiet || (git commit -m "État des alertes" && git pull --rebase && git push)
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs
