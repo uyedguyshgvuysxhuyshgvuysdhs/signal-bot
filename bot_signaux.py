@@ -308,8 +308,20 @@ def analyst_changes(ticker, days=ANALYST_DAYS):
 def send_discord(text):
     if not WEBHOOK:
         raise SystemExit("DISCORD_WEBHOOK_URL n'est pas défini (voir l'en-tête du script).")
-    r = requests.post(WEBHOOK, json={"content": text[:1990]}, timeout=15)
-    r.raise_for_status()
+    chunks, cur = [], ""
+    for line in text.split("\n"):   # Discord limite un message à 2000 caractères : on découpe par lignes
+        line = line[:1500]
+        if cur and len(cur) + len(line) + 1 > 1900:
+            chunks.append(cur)
+            cur = line
+        else:
+            cur = cur + "\n" + line if cur else line
+    chunks.append(cur)
+    for i, c in enumerate(chunks):
+        if i:
+            time.sleep(0.7)
+        r = requests.post(WEBHOOK, json={"content": c}, timeout=15)
+        r.raise_for_status()
 
 
 def load_state():
@@ -427,6 +439,8 @@ def make_verdict(sig, conf, votes, days):
     near = days is not None and days <= EARNINGS_CAUTION_DAYS
     when = "aujourd'hui" if days == 0 else "demain" if days == 1 else f"dans {days} j"
     if sig == "VENTE":
+        if conf == "faible":
+            return "ATTENDRE", (f"⚠️ résultats {when}, " if near else "") + "signal de vente mais confiance faible · " + reason
         return "ÉVITER / VENDRE", "signal de vente du jour · " + reason
     if sig == "ACHAT" and conf in ("forte", "moyenne") and not near:
         return "ACHETER", f"signal d'achat du jour (confiance {conf}) · " + reason
