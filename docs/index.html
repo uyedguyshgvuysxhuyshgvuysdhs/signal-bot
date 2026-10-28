@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Signal · Tableau de bord du bot</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{--bg:#F3F5FA;--panel:#fff;--ink:#0F1A2E;--mut:#64748B;--line:#E1E7F0;--acc:#3B6BFF;--buy:#12A150;--wait:#C98200;--avoid:#D8344A;--sh:0 1px 2px rgba(15,26,46,.05),0 8px 24px rgba(15,26,46,.05)}
+:root[data-theme=dark]{--bg:#080D17;--panel:#101828;--ink:#E8EDF6;--mut:#8995AB;--line:#1D2A41;--acc:#7098FF;--buy:#2EDB85;--wait:#F5B83D;--avoid:#FF6B7A;--sh:0 8px 28px rgba(0,0,0,.35)}
+*{box-sizing:border-box}html{height:100%}
+body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font:400 15px/1.5 "Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;padding-top:env(safe-area-inset-top,0)}
+.mono{font-family:"JetBrains Mono",ui-monospace,Consolas,monospace}
+a{color:inherit;text-decoration:none}button{font:inherit;color:inherit;cursor:pointer}
+.app{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+.side{position:sticky;top:0;height:100vh;padding:22px 16px;border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;gap:6px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:19px;margin:0 8px 18px}
+.brand svg{width:30px;height:30px}
+.nav a{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;color:var(--mut);font-weight:500}
+.nav a:hover{background:var(--bg)}.nav a.on{background:var(--bg);color:var(--ink);box-shadow:inset 3px 0 0 var(--acc)}
+.side small{margin-top:auto;color:var(--mut);padding:0 8px}
+.main{padding:22px clamp(16px,3vw,36px) 60px;min-width:0}
+.top{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:20px}
+h1{font-size:clamp(24px,3.4vw,32px);line-height:1.15;margin:0;letter-spacing:-.02em}h2{font-size:17px;margin:0 0 12px}
+.pill{display:inline-flex;gap:7px;align-items:center;font-size:13px;color:var(--mut);background:var(--panel);border:1px solid var(--line);border-radius:99px;padding:5px 12px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--buy)}.demo .dot{background:var(--wait)}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:9px 14px;font-weight:600}
+.btn:hover{border-color:var(--acc)}.btn.pri{background:var(--acc);border-color:var(--acc);color:#fff}.btn.pri:hover{filter:brightness(1.1)}
+:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--sh)}
+.tape{height:76px;margin:0 0 20px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--panel)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px}
+.stat{padding:16px}.stat b{display:block;font:700 30px/1.1 "JetBrains Mono",monospace;margin-top:4px}.stat span{color:var(--mut);font-size:13px}
+.buy{color:var(--buy)}.wait{color:var(--wait)}.avoid{color:var(--avoid)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.chip{border:1px solid var(--line);background:var(--panel);border-radius:99px;padding:6px 14px;font-size:14px;font-weight:500}
+.chip[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+input[type=search],input[type=password],input[type=text]{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 12px;min-width:0}
+.bar input{flex:1;min-width:140px;max-width:260px;margin-left:auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.card{display:block;text-align:left;width:100%;padding:16px;border-radius:16px;background:var(--panel);border:1px solid var(--line);box-shadow:var(--sh);transition:transform .15s,border-color .15s}
+.card:hover{transform:translateY(-3px);border-color:var(--acc)}
+.row{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.tk{font:700 18px "JetBrains Mono",monospace}.nm{color:var(--mut);font-size:13px}
+.badge{font-size:12px;font-weight:700;padding:3px 9px;border-radius:99px;border:1px solid currentColor;white-space:nowrap}
+.px{font:700 22px "JetBrains Mono",monospace;margin-top:10px}.chg{font:500 13px "JetBrains Mono",monospace;margin-left:6px}
+.dots{display:flex;gap:4px;margin-top:10px;align-items:center;color:var(--mut);font-size:12px}
+.dots i{width:18px;height:6px;border-radius:3px;background:var(--line)}.dots i.p{background:var(--buy)}.dots i.n{background:var(--avoid)}
+.split{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px}
+.chart{height:520px;padding:0;overflow:hidden}.small{height:430px;padding:0;overflow:hidden}
+.src{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line)}.src:first-of-type{border-top:0}
+.nws a{display:block;padding:8px 0;border-top:1px solid var(--line);font-size:14px}.nws a:hover{color:var(--acc)}
+.muted{color:var(--mut);font-size:14px}.back{color:var(--mut);display:inline-block;margin-bottom:10px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.demo-b{background:color-mix(in srgb,var(--wait) 14%,var(--panel));border:1px solid var(--wait);border-radius:12px;padding:10px 14px;margin-bottom:16px;font-size:14px}
+.form{display:grid;gap:12px;max-width:620px}.form label{font-weight:600;font-size:14px}.hint{color:var(--mut);font-size:13px}
+#toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0));transform:translateX(-50%);display:grid;gap:8px;z-index:50}
+.t{background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:500;box-shadow:var(--sh)}.t.err{background:var(--avoid);color:#fff}
+@media(max-width:900px){.split,.two{grid-template-columns:1fr}.chart{height:420px}}
+@media(max-width:760px){
+ .app{grid-template-columns:1fr}
+ .side{position:fixed;top:auto;bottom:0;left:0;right:0;height:auto;z-index:20;flex-direction:row;justify-content:space-around;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0));border:0;border-top:1px solid var(--line)}
+ .brand,.side small{display:none}.nav{display:flex;width:100%;justify-content:space-around}.nav a{flex-direction:column;gap:2px;font-size:12px;padding:6px 10px}.nav a.on{box-shadow:none}
+ .main{padding-bottom:100px}
+}
+@media(prefers-reduced-motion:reduce){.card{transition:none}.card:hover{transform:none}}
+</style>
+</head>
+<body>
+<div class="app">
+ <aside class="side">
+  <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--acc)"/><path d="M7 21l6-7 4 4 8-10" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Signal</div>
+  <nav class="nav" id="nav">
+   <a href="#/" data-p="home"><span>◧</span>Accueil</a>
+   <a href="#/marche" data-p="marche"><span>◍</span>Marché</a>
+   <a href="#/reglages" data-p="reglages"><span>⚙</span>Réglages</a>
+  </nav>
+  <small>Signaux indicatifs, pas un conseil financier.</small>
+ </aside>
+ <div class="main"><main id="view"></main></div>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="donnees.js"></script>
+<script>
+const $=(s,r=document)=>r.querySelector(s);
+const store={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const KEYS=['tendance court terme','actu','analystes','tendance 200 j','marché'];
+const EX={BAC:'NYSE',F:'NYSE',PFE:'NYSE'};const sym=t=>(EX[t]||'NASDAQ')+':'+t;
+const VERD={'ACHETER':{c:'buy',e:'🟢',col:0x2EDB85},'ATTENDRE':{c:'wait',e:'🟡',col:0xF5B83D},'ÉVITER / VENDRE':{c:'avoid',e:'🔴',col:0xFF6B7A}};
+const view=$('#view'),theme=()=>document.documentElement.dataset.theme;
+let filter='all',query='';
+
+function demo(){
+ let seed=11;const rnd=()=>(seed=seed*16807%2147483647)/2147483647;
+ const L=[['AAPL','Apple',231,[1,0,0,1,1]],['MSFT','Microsoft',428,[1,1,1,1,1]],['NVDA','Nvidia',187,[1,1,1,1,0]],['TSLA','Tesla',262,[-1,0,0,1,1]],['AMZN','Amazon',215,[1,0,1,1,1]],['GOOGL','Google Alphabet',178,[0,0,0,1,1]],['META','Meta Platforms',590,[-1,0,-1,1,1]],['AMD','AMD',152,[1,1,0,1,1]],['NFLX','Netflix',845,[0,0,0,1,1]],['INTC','Intel',24,[-1,0,0,-1,1]],['PLTR','Palantir',74,[1,1,1,1,1]],['BAC','Bank of America',44,[-1,-1,0,1,1]],['F','Ford Motor',11,[-1,0,-1,-1,1]],['PFE','Pfizer',26,[0,0,0,-1,1]],['SOFI','SoFi',15,[1,0,1,1,1]]];
+ const stocks=L.map(([t,name,price,v])=>{const votes={};KEYS.forEach((k,i)=>votes[k]=v[i]);const tot=v.reduce((a,b)=>a+b,0);
+  const verdict=tot>=3?'ACHETER':tot<=-3?'ÉVITER / VENDRE':'ATTENDRE';let c=price,cl=[];for(let i=0;i<60;i++){cl.unshift(+c.toFixed(2));c*=1+(rnd()-.48)*.025}
+  const pos=KEYS.filter(k=>votes[k]>0),neg=KEYS.filter(k=>votes[k]<0);
+  return{t,name,price,chg1:(rnd()-.5)*.05,verdict,votes,sig:null,conf:null,rsi:40+rnd()*30,support:price*.95,resistance:price*1.05,closes:cl,news:[],earn:null,days:null,filings:[],
+   reason:(pos.length?'pour : '+pos.join(', '):'aucune source favorable')+(neg.length?' · contre : '+neg.join(', '):'')}});
+ return{updated:null,market_up:true,stocks}}
+const DEMO=!window.BOT_DATA,D=window.BOT_DATA||demo();
+
+function spark(a,col){const w=120,h=38,mn=Math.min(...a),mx=Math.max(...a),r=mx-mn||1;
+ const p=a.map((v,i)=>`${(i/(a.length-1)*w).toFixed(1)},${(h-3-(v-mn)/r*(h-6)).toFixed(1)}`).join(' ');
+ return`<svg viewBox="0 0 ${w} ${h}" width="100%" height="38" preserveAspectRatio="none" aria-hidden="true"><polyline points="${p}" fill="none" stroke="var(--${col})" stroke-width="2" stroke-linejoin="round"/></svg>`}
+const dots=s=>`<div class="dots">${KEYS.map(k=>`<i class="${s.votes[k]>0?'p':s.votes[k]<0?'n':''}"></i>`).join('')}<span>&nbsp;${KEYS.filter(k=>s.votes[k]>0).length}/5 favorables</span></div>`;
+const pct=x=>(x>=0?'+':'')+(x*100).toFixed(1)+' %';
+function tv(el,name,cfg){const th=theme();
+ el.innerHTML='<div class="tradingview-widget-container" style="height:100%;width:100%"><div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div></div>';
+ const s=document.createElement('script');s.src=`https://s3.tradingview.com/external-embedding/embed-widget-${name}.js`;s.async=true;
+ s.text=JSON.stringify({...cfg,colorTheme:th,theme:th});el.firstChild.appendChild(s)}
+function toast(m,err){const t=document.createElement('div');t.className='t'+(err?' err':'');t.textContent=m;$('#toast').appendChild(t);setTimeout(()=>t.remove(),3500)}
+
+async function sendDiscord(payload){
+ const url=store.get('webhook');
+ if(!url){toast('Ajoute d’abord ton webhook dans Réglages.',1);location.hash='#/reglages';return}
+ try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  if(!r.ok)throw new Error('code '+r.status);toast('Envoyé sur Discord ✅')}catch(e){toast('Échec de l’envoi : '+e.message,1)}}
+function summaryPayload(){
+ const embeds=Object.entries(VERD).map(([n,m])=>{const g=D.stocks.filter(s=>s.verdict===n);
+  return g.length&&{title:`${m.e} ${n}`,color:m.col,description:g.map(s=>`• **${s.t}** (${s.price.toFixed(2)} $) : ${s.reason}`.slice(0,230)).join('\n')}}).filter(Boolean);
+ if(embeds.length)embeds[embeds.length-1].footer={text:'Signaux indicatifs, pas un conseil financier.'};
+ return{content:`📊 **Résumé du ${new Date().toLocaleDateString('fr-FR')}** : que faire aujourd’hui ?`,embeds}}
+const stockPayload=s=>({embeds:[{title:`${VERD[s.verdict].e} ${s.verdict} : ${s.t} (${s.price.toFixed(2)} $)`,color:VERD[s.verdict].col,description:s.reason,footer:{text:'Signaux indicatifs, pas un conseil financier.'}}]});
+
+function head(title,extra=''){return`<div class="top"><div><h1>${title}</h1></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+ <span class="pill ${DEMO?'demo':''}"><span class="dot"></span>${DEMO?'Mode démo':'Données du '+esc(D.updated)}</span>${extra}
+ <button class="btn" id="th" aria-label="Changer de thème">◐ Thème</button></div></div>`}
+function bindTop(){$('#th').onclick=()=>{const n=theme()==='dark'?'light':'dark';document.documentElement.dataset.theme=n;store.set('theme',n);route()}}
+
+function home(){
+ const g=v=>D.stocks.filter(s=>s.verdict===v).length;
+ view.innerHTML=head('Résumé du jour','<button class="btn pri" id="sum">Envoyer le résumé sur Discord</button>')+
+ (DEMO?'<div class="demo-b"><b>Données de démonstration.</b> Lance le bot (<span class="mono">python bot_signaux.py</span>) : il crée <span class="mono">donnees.js</span> à côté de ce fichier, puis recharge la page.</div>':'')+
+ '<div class="tape" id="tape"></div><div class="stats">'+
+ `<div class="panel stat"><span>🟢 À acheter</span><b class="buy">${g('ACHETER')}</b></div><div class="panel stat"><span>🟡 À attendre</span><b class="wait">${g('ATTENDRE')}</b></div><div class="panel stat"><span>🔴 À éviter / vendre</span><b class="avoid">${g('ÉVITER / VENDRE')}</b></div>`+
+ `<div class="panel stat"><span>Marché (S&amp;P 500)</span><b class="${D.market_up==null?'':D.market_up?'buy':'avoid'}">${D.market_up==null?'—':D.market_up?'Haussier':'Baissier'}</b></div></div>`+
+ `<div class="bar">${[['all','Toutes'],['ACHETER','À acheter'],['ATTENDRE','À attendre'],['ÉVITER / VENDRE','À éviter']].map(([k,l])=>`<button class="chip" data-f="${k}" aria-pressed="${filter===k}">${l}</button>`).join('')}<input type="search" id="q" placeholder="Rechercher une action" aria-label="Rechercher" value="${esc(query)}"></div><div class="grid" id="grid"></div>`;
+ bindTop();$('#sum').onclick=()=>sendDiscord(summaryPayload());
+ tv($('#tape'),'ticker-tape',{symbols:D.stocks.map(s=>({proName:sym(s.t),title:s.t})),showSymbolLogo:true,displayMode:'adaptive',isTransparent:true,locale:'fr'});
+ document.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{filter=b.dataset.f;document.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',x===b));cards()});
+ $('#q').oninput=e=>{query=e.target.value;cards()};cards()}
+function cards(){
+ const q=query.trim().toLowerCase();
+ const L=D.stocks.filter(s=>(filter==='all'||s.verdict===filter)&&(!q||(s.t+s.name).toLowerCase().includes(q)));
+ $('#grid').innerHTML=L.length?L.map(s=>{const m=VERD[s.verdict];return`<a class="card" href="#/action/${s.t}">
+  <div class="row"><div><div class="tk">${s.t}</div><div class="nm">${esc(s.name)}</div></div><span class="badge ${m.c}">${s.verdict.split(' ')[0]}</span></div>
+  <div class="px">${s.price.toFixed(2)} $<span class="chg ${s.chg1>=0?'buy':'avoid'}">${pct(s.chg1)}</span></div>${spark(s.closes,m.c)}${dots(s)}
+  ${s.days!=null&&s.days<=3?'<div class="muted" style="margin-top:6px">📅 Résultats '+(s.days===0?'aujourd’hui':s.days===1?'demain':'dans '+s.days+' j')+'</div>':''}</a>`}).join(''):'<p class="muted">Aucune action ne correspond.</p>'}
+
+function detail(t){
+ const i=D.stocks.findIndex(s=>s.t===t);if(i<0)return home();
+ const s=D.stocks[i],m=VERD[s.verdict],N=D.stocks.length,p=D.stocks[(i+N-1)%N],n=D.stocks[(i+1)%N];
+ const st=v=>v>0?['✅','Favorable']:v<0?['❌','Défavorable']:['➖','Neutre'];
+ view.innerHTML=head(`${s.t} <span class="nm" style="font-size:16px;font-weight:500">${esc(s.name)}</span>`,`<button class="btn" id="one">Envoyer sur Discord</button>`)+
+ `<a class="back" href="#/">← Toutes les actions</a> · <a class="back" href="#/action/${p.t}">‹ ${p.t}</a> <a class="back" href="#/action/${n.t}">${n.t} ›</a>
+ <div class="split"><div><div class="panel chart" id="chart"></div><div class="two"><div class="panel small" id="ta"></div><div class="panel small" id="tn"></div></div></div>
+ <div><div class="panel"><span class="badge ${m.c}">${m.e} ${s.verdict}</span><div class="px">${s.price.toFixed(2)} $<span class="chg ${s.chg1>=0?'buy':'avoid'}">${pct(s.chg1)}</span></div>
+ <p class="muted">${esc(s.reason)}</p>${s.conf?`<p class="muted">Confiance du signal : <b>${s.conf}</b></p>`:''}</div>
+ <div class="panel" style="margin-top:14px"><h2>Les 5 sources</h2>${KEYS.map(k=>{const[e,l]=st(s.votes[k]);return`<div class="src"><span>${e} ${k[0].toUpperCase()+k.slice(1)}</span><span class="muted">${l}</span></div>`}).join('')}</div>
+ <div class="panel" style="margin-top:14px"><h2>Repères</h2><div class="src"><span>RSI</span><b class="mono">${s.rsi.toFixed(0)}</b></div><div class="src"><span>Plus bas 10 j</span><b class="mono">${s.support.toFixed(2)} $</b></div><div class="src"><span>Plus haut 10 j</span><b class="mono">${s.resistance.toFixed(2)} $</b></div>
+ ${s.earn?`<div class="src"><span>Résultats</span><b>${esc(s.earn)}</b></div>`:''}${(s.filings||[]).map(f=>`<div class="src"><span>📄 SEC 8-K ${esc(f.date)}</span><span class="muted">${esc((f.items||[]).join(' ; ')||'événement')}</span></div>`).join('')}</div>
+ ${(s.news||[]).length?`<div class="panel nws" style="margin-top:14px"><h2>Actus retenues par le bot</h2>${s.news.map(x=>`<a href="${esc(x.link)}" target="_blank" rel="noopener">${x.score>0?'🟢':x.score<0?'🔴':'⚪'} ${esc(x.title)}</a>`).join('')}</div>`:''}</div></div>
+ <p class="muted" style="margin-top:14px">Graphiques et actualités en direct : <a href="https://fr.tradingview.com/" target="_blank" rel="noopener" style="text-decoration:underline">TradingView</a>.</p>`;
+ bindTop();$('#one').onclick=()=>sendDiscord(stockPayload(s));
+ tv($('#chart'),'advanced-chart',{symbol:sym(t),interval:'D',timezone:'Europe/Paris',style:'1',locale:'fr',allow_symbol_change:false,autosize:true,support_host:'https://www.tradingview.com'});
+ tv($('#ta'),'technical-analysis',{symbol:sym(t),interval:'1D',width:'100%',height:'100%',isTransparent:true,showIntervalTabs:true,displayMode:'single',locale:'fr'});
+ tv($('#tn'),'timeline',{feedMode:'symbol',symbol:sym(t),displayMode:'regular',width:'100%',height:'100%',isTransparent:true,locale:'fr'})}
+
+function marche(){
+ view.innerHTML=head('Marché')+`<div class="panel chart" id="spy"></div><div class="two"><div class="panel small" id="hm"></div><div class="panel small" id="ev"></div></div>`;bindTop();
+ tv($('#spy'),'advanced-chart',{symbol:'AMEX:SPY',interval:'D',timezone:'Europe/Paris',locale:'fr',autosize:true,support_host:'https://www.tradingview.com'});
+ tv($('#hm'),'stock-heatmap',{exchanges:[],dataSource:'SPX500',grouping:'sector',blockSize:'market_cap_basic',blockColor:'change',locale:'fr',hasTopBar:false,isDatasetEnabled:false,isZoomEnabled:true,hasSymbolTooltip:true,width:'100%',height:'100%'});
+ tv($('#ev'),'events',{width:'100%',height:'100%',isTransparent:true,locale:'fr',importanceFilter:'0,1',countryFilter:'us,fr,eu'})}
+
+function reglages(){
+ const cur=theme();
+ view.innerHTML=head('Réglages')+`<div class="panel form"><div><label for="wh">Webhook Discord</label><input id="wh" type="password" autocomplete="off" placeholder="https://discord.com/api/webhooks/…" value="${esc(store.get('webhook')||'')}" style="width:100%"><p class="hint">Enregistré uniquement dans ce navigateur. Ne le partage avec personne.</p></div>
+ <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri" id="save">Enregistrer</button><button class="btn" id="test">Envoyer un message de test</button></div>
+ <hr style="border:0;border-top:1px solid var(--line);width:100%"><div><label>Mise à jour des données</label><p class="hint">Les données viennent du bot : à chaque lancement de <span class="mono">python bot_signaux.py</span>, il met à jour <span class="mono">donnees.js</span>. Recharge ensuite cette page. Les graphiques, eux, sont toujours en direct.</p></div></div>`;
+ bindTop();
+ $('#save').onclick=()=>{const v=$('#wh').value.trim();if(v&&!/^https:\/\/(discord|discordapp)\.com\/api\/webhooks\//.test(v))return toast('Cette adresse ne ressemble pas à un webhook Discord.',1);store.set('webhook',v);toast('Réglages enregistrés ✅')};
+ $('#test').onclick=()=>{$('#save').click();sendDiscord({content:'✅ Le site Signal est bien connecté à Discord.'})}}
+
+function route(){
+ const h=location.hash.replace(/^#\/?/,'').split('/'),p=h[0]||'home';
+ document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.p===(p==='action'?'home':p)));
+ ({marche,reglages}[p]||(p==='action'?()=>detail(decodeURIComponent(h[1]||'')):home))();window.scrollTo(0,0)}
+document.documentElement.dataset.theme=store.get('theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+addEventListener('hashchange',route);route();
+</script>
+</body>
+</html>
